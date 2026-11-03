@@ -1440,7 +1440,7 @@ function renderInspector() {
       </div>
       <div class="row">
         <input class="color-input" id="insp-tile-accent" type="color" value="${esc(key.tile?.accent || '#4f8cff')}" title="Accent bar" />
-        <input class="input" id="insp-tile-glyph" maxlength="40" value="${esc(key.tile?.glyph || key.emoji)}" placeholder="Glyph" />
+        <input class="input" id="insp-tile-glyph" maxlength="40" value="${esc(key.tile?.glyph || (key.icon ? '' : key.emoji))}" placeholder="Glyph" />
         <input class="color-input" id="insp-tile-glyph-color" type="color" value="${esc(key.tile?.glyphColor || '#f4f7ff')}" title="Glyph colour" />
         <input class="input tile-size" id="insp-tile-glyph-size" type="number" min="8" max="80" value="${key.tile?.glyphSize || ''}" placeholder="Auto" title="Glyph size" />
       </div>
@@ -1452,7 +1452,7 @@ function renderInspector() {
         <input class="input" id="insp-tile-subtitle" maxlength="80" value="${esc(key.tile?.subtitle || '')}" placeholder="Subtitle" />
         <input class="input tile-size" id="insp-tile-subtitle-size" type="number" min="6" max="40" value="${key.tile?.subtitleSize || ''}" placeholder="Auto" title="Subtitle size" />
       </div>
-      <div class="field-hint">A native tile: accent bar, glyph, title and subtitle. Text is stored in config.json, not as an image. Leave a size blank for automatic sizing.</div>
+      <div class="field-hint">A native tile: accent bar, glyph, title and subtitle. Text is stored in config.json, not as an image. Leave a size blank for automatic sizing, and leave the glyph empty to show the key's image from the Icon tab instead.</div>
       <div class="style-reset">
         <button class="link-btn" id="insp-tile-glyph-color-reset" type="button" ${key.tile?.glyphColor ? '' : 'hidden'}>Reset glyph colour</button>
       </div>
