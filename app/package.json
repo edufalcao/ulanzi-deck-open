@@ -34,13 +34,13 @@
   "dependencies": {
     "jszip": "^3.10.2",
     "node-hid": "^3.4.0",
-    "ws": "^8.22.1"
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
     "@types/node": "^26.6.6",
-    "electron": "^45.2.1",
-    "eslint": "^10.14.0",
+    "electron": "^45.3.2",
+    "eslint": "^10.15.0",
     "typescript": "^7.0.2"
   }
 }
