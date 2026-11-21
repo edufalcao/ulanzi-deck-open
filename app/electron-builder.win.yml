@@ -1,0 +1,48 @@
+# Windows build (electron-builder). The macOS build keeps using
+# electron-packager through `npm run package`.
+appId: com.edufalcao.ulanzideckopen
+productName: Ulanzi Deck Open
+copyright: Copyright (c) Ulanzi Deck Open contributors (MIT)
+directories:
+  output: dist
+  buildResources: build
+npmRebuild: false
+files:
+  - "**/*"
+  - "!dist/**"
+  - "!test/**"
+  - "!scripts/**"
+  - "!native/**"
+  - "!bin/**"
+  - "!build/**"
+  - "!eslint.config.js"
+  - "!tsconfig.json"
+  - "!electron-builder.win.yml"
+  # koffi ships binaries for every OS; keep the Windows ones.
+  - "!node_modules/koffi/build/koffi/{darwin,freebsd,linux,musl,openbsd}_*/**"
+  - "!node_modules/koffi/src/**"
+  - "!node_modules/node-hid/prebuilds/HID{,_hidraw}-{darwin,linux}-*/**"
+asarUnpack:
+  - "node_modules/koffi/**"
+  - "node_modules/node-hid/**"
+extraResources:
+  - from: build/tray-win.png
+    to: tray-win.png
+  - from: build/tray-win@2x.png
+    to: tray-win@2x.png
+artifactName: "Ulanzi-Deck-Open-${version}-win-${arch}.${ext}"
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: zip
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Ulanzi Deck Open
+  artifactName: "Ulanzi-Deck-Open-Setup-${version}.${ext}"

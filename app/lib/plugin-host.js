@@ -345,7 +345,7 @@ class PluginHost extends EventEmitter {
     const { command, args, env } = this.spawnCommand(meta, executable, port);
     this._log(`spawn ${meta.uuid} ${command} ${args.slice(1).join(' ')}`);
     const generation = this._nextGeneration(meta.uuid);
-    const proc = this.spawn(command, args, { cwd: meta.dir, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = this.spawn(command, args, { cwd: meta.dir, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     this.childGenerations.set(proc, generation);
     proc.on('error', (err) => {
       this._reportError(`${meta.name} could not start: ${err.message}`);

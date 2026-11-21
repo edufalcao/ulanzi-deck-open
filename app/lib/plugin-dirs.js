@@ -5,6 +5,7 @@
 
 const path = require('node:path');
 const os = require('node:os');
+const { win } = require('./platform');
 
 /** Ulanzi Studio's plugin folder plus the legacy `~/.ulanzi/Plugins`. */
 function pluginRootDirs() {
@@ -12,6 +13,7 @@ function pluginRootDirs() {
   if (process.platform !== 'darwin') {
     dirs.length = 0;
   }
+  if (win) dirs.push(...win.paths.ulanziPluginDirs());
   dirs.push(path.join(os.homedir(), '.ulanzi', 'Plugins'));
   return dirs;
 }
@@ -26,6 +28,7 @@ function streamDeckPluginDirs(appDir) {
       path.join(home, 'Library/Application Support/com.elgato.StreamDeck/Plugins')
     );
   }
+  if (win) dirs.push(...win.paths.streamDeckPluginDirs());
   return dirs;
 }
 

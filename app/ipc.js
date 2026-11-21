@@ -20,6 +20,7 @@ const { CH } = require('./lib/channels');
 const { download: downloadPluginPackage } = require('./lib/sdcatalog');
 const { buildPage, buildKeyUpdate } = require('./lib/page');
 const sysstats = require('./lib/sysstats');
+const { win: winPlatform } = require('./lib/platform');
 
 const RENDERER_DIR = path.join(__dirname, 'renderer');
 
@@ -71,6 +72,7 @@ function registerIpc(ctx) {
   let popWindow = null;
 
 function listApps() {
+  if (winPlatform) return winPlatform.apps.listApps({ readShortcut: (lnk) => shell.readShortcutLink(lnk) });
   const roots = [
     '/Applications',
     '/System/Applications',
@@ -202,10 +204,12 @@ handle(CH.appUpdateSettingsChanged, () => {
 });
 
 handle(CH.appAccessibility, () => ({
-  trusted: systemPreferences.isTrustedAccessibilityClient(false),
+  // Windows has no Accessibility permission for SendInput.
+  trusted: winPlatform ? true : systemPreferences.isTrustedAccessibilityClient(false),
 }));
 
 handle(CH.appRequestAccessibility, () => {
+  if (winPlatform) return { trusted: true };
   const trusted = systemPreferences.isTrustedAccessibilityClient(true);
   // Always surface the pane: users press "Grant…" to inspect or change the
   // permission, even when it is currently granted.
@@ -214,6 +218,7 @@ handle(CH.appRequestAccessibility, () => {
 });
 
 handle(CH.appOpenInputMonitoring, () => {
+  if (winPlatform) return { ok: false, error: 'Input Monitoring is a macOS setting' };
   shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent');
   return { ok: true };
 });
@@ -277,6 +282,7 @@ function iconsRoot() {
 }
 
 function officialIconsRoot() {
+  if (winPlatform) return winPlatform.paths.ulanziIconsDir();
   return path.join(os.homedir(), 'Library/Application Support/Ulanzi/UlanziDeck/Icons');
 }
 
@@ -473,6 +479,7 @@ handle(CH.pluginsKey, (_evt, actionid, pressed) => ({
 }));
 
 handle(CH.pluginsInstallRosetta, () => {
+  if (winPlatform) return { ok: false, error: 'Rosetta is only needed on Apple Silicon Macs' };
   const command = 'softwareupdate --install-rosetta --agree-to-license';
   try {
     spawn(
@@ -853,7 +860,8 @@ let frontmostWatcher = null;
  * the front app. The renderer still polls, but each poll now reads this cache.
  */
 function ensureFrontmostWatcher() {
-  if (frontmostWatcher) return;
+  // Windows reads the foreground window directly; there is no lsappinfo.
+  if (frontmostWatcher || winPlatform) return;
   frontmostWatcher = new FrontmostWatcher();
   frontmostWatcher.on('change', () => {
     frontmostApp({ fresh: true }).catch(() => {});
@@ -874,6 +882,11 @@ function frontmostApp({ fresh = false } = {}) {
   ensureFrontmostWatcher();
   if (!fresh && Date.now() - frontmostCache.at < 1000) return Promise.resolve(frontmostCache.value);
   if (frontmostCache.pending) return frontmostCache.pending;
+  if (winPlatform) {
+    const value = winPlatform.frontmost.frontmostApp();
+    frontmostCache = { at: Date.now(), value, pending: null };
+    return Promise.resolve(value);
+  }
   frontmostCache.pending = (async () => {
     try {
       const asn = (await execFileAsync('lsappinfo', ['front'], { encoding: 'utf8' }))
@@ -904,7 +917,12 @@ function frontmostApp({ fresh = false } = {}) {
 handle(CH.appLoginItem, (event, enabled) => {
   try {
     if (!devRun) {
-      app.setLoginItemSettings({ openAtLogin: enabled === true, openAsHidden: true });
+      app.setLoginItemSettings({
+        openAtLogin: enabled === true,
+        openAsHidden: true,
+        // openAsHidden is macOS-only; Windows passes a flag instead.
+        ...(winPlatform ? { args: ['--hidden'] } : {}),
+      });
     }
     return { ok: true };
   } catch (err) {

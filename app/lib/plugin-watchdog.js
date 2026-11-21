@@ -7,4 +7,13 @@ const parent = process.ppid;
 
 setInterval(() => {
   if (process.ppid !== parent) process.exit(0);
+  // Windows never re-parents an orphan, so ppid stays the same: check that the
+  // parent is still alive instead.
+  if (process.platform === 'win32') {
+    try {
+      process.kill(parent, 0);
+    } catch (err) {
+      if (err && err.code === 'ESRCH') process.exit(0);
+    }
+  }
 }, 1000).unref();

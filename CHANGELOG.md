@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Windows 10/11 (x64).** The app runs on Windows with the same editor, deck protocol and config. Windows code lives in `app/lib/platform/win/` and `app/renderer/platform-win.{js,css}`; shared files only gain short `win32` guards, so the macOS paths are unchanged. See `docs/WINDOWS.md`.
+  - Hotkeys, Type text and Media keys use `SendInput` through koffi (no helper binary). `cmd` in profiles is sent as Ctrl; the hotkey picker gains a `win` modifier.
+  - Run command uses `cmd.exe`; timeouts kill the process tree with `taskkill`. Play audio uses WPF `MediaPlayer`. ZIPs unpack with the built-in `tar.exe`.
+  - The front-app profile switch, the app picker and app icons use the foreground window, Start menu shortcuts and shell icons.
+  - Ulanzi Studio for Windows plugins, icons and profiles are read from `%APPDATA%\Ulanzi\UlanziDeck`; its `Win+Shift+S` style hotkeys import. Stream Deck plugins run `CodePathWin` natively and are told `platform: "windows"`.
+  - GPU stats come from the `GPU Engine` performance counters. Windows starter pages replace the macOS ones on a fresh config.
+  - `npm run start:win`, `npm run package:win` and `npm run make:win` (electron-builder: unsigned NSIS installer and portable ZIP).
+- **The HID lookup never falls back to the keyboard collection on Windows**, which Windows will not open.
+- **Plugin watchdog checks that its parent is alive on Windows**, where orphans are not re-parented.
+
+### Tests
+- `test/platform-win.test.js` (key mapping, plugin code selection, orphan detection, Studio hotkey import, Windows integration). `npm run test:win` skips the upstream tests that assume macOS or POSIX through `test/win-skip.cjs`. CI gains a `windows-latest` job.
+
 ## 0.16.14 — 2026-11-08
 
 ### Changed

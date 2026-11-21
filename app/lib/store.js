@@ -348,7 +348,47 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+/** Windows starter pages: Windows apps, media keys and Windows shortcuts. */
+function defaultPagesWindows() {
+  const mediaId = randomUUID();
+  const media = (op) => ({ type: 'media', op });
+  const main = {
+    id: randomUUID(),
+    name: 'Main',
+    keys: {
+      0: key('🌐', 'Browser', { type: 'url', value: 'https://www.google.com' }, '#16324a'),
+      1: key('⌨️', 'Terminal', { type: 'app', value: 'wt' }, '#1d2430'),
+      2: key('📁', 'Explorer', { type: 'app', value: 'explorer' }, '#2a2f45'),
+      3: key('🐙', 'GitHub', { type: 'url', value: 'https://github.com' }, '#2d2340'),
+      4: key('📝', 'Notepad', { type: 'app', value: 'notepad' }, '#3a3418'),
+      5: key('📸', 'Screenshot', { type: 'hotkey', value: 'win+shift+s' }, '#1f3328'),
+      6: key('🔒', 'Lock', { type: 'command', value: 'rundll32.exe user32.dll,LockWorkStation' }, '#33212a'),
+      7: key('▶️', 'Media', { type: 'page', value: mediaId }, '#213040'),
+      8: key('🔉', 'Vol −', media('volumedown'), '#24302a'),
+      9: key('🔇', 'Mute', media('mute'), '#2e2626'),
+      10: key('🔊', 'Vol +', media('volumeup'), '#24302a'),
+      11: key('🖥️', 'Desktop', { type: 'hotkey', value: 'win+d' }, '#1c1c30'),
+      12: key('🧮', 'Calculator', { type: 'app', value: 'calc' }, '#2c2c2c'),
+    },
+  };
+  const mediaPage = {
+    id: mediaId,
+    name: 'Media',
+    keys: {
+      0: key('⏮', 'Previous', media('prev')),
+      1: key('⏯', 'Play/Pause', media('playpause')),
+      2: key('⏭', 'Next', media('next')),
+      3: key('🔉', 'Vol −', media('volumedown')),
+      4: key('🔊', 'Vol +', media('volumeup')),
+      7: key('🔇', 'Mute', media('mute')),
+      8: key('⬅️', 'Back', { type: 'page', value: main.id }),
+    },
+  };
+  return [main, mediaPage];
+}
+
 function defaultPages() {
+  if (process.platform === 'win32') return defaultPagesWindows();
   const mediaId = randomUUID();
   const main = {
     id: randomUUID(),

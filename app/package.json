@@ -15,14 +15,19 @@
     "prepackage": "sh scripts/build-helpers.sh",
     "start": "electron .",
     "dev": "electron . --dev",
+    "start:win": "electron .",
+    "dev:win": "electron . --dev",
     "package": "electron-packager . 'Ulanzi Deck Open' --platform=darwin --arch=arm64 --out=dist --overwrite --icon=build/icon --app-bundle-id=com.edufalcao.ulanzideckopen --prune=true --ignore='^/(dist|build/icon\\.iconset|test|scripts|native|docs|build/helpers|eslint\\.config\\.js|\\.github)'",
     "package:all": "electron-packager . 'Ulanzi Deck Open' --platform=darwin --arch=universal --out=dist --overwrite --icon=build/icon --app-bundle-id=com.edufalcao.ulanzideckopen --prune=true --ignore='^/(dist|build/icon\\.iconset|test|scripts|native|docs|build/helpers|eslint\\.config\\.js|\\.github)' --osx-universal.x64ArchFiles='Contents/Resources/app.asar.unpacked/node_modules/node-hid/prebuilds/**'",
+    "package:win": "electron-builder --config electron-builder.win.yml --win --dir",
+    "make:win": "electron-builder --config electron-builder.win.yml --win",
     "postpackage": "sh scripts/after-package.sh",
     "install-app": "sh scripts/install.sh",
     "readme-screenshot": "sh scripts/readme-screenshot.sh",
     "proto13-test": "node scripts/proto13-test.js",
     "measure:config": "node scripts/measure-config.js",
     "test": "node --test \"test/*.test.js\"",
+    "test:win": "node --require ./test/win-skip.cjs --test \"test/*.test.js\"",
     "make:dmg": "sh scripts/make-dmg.sh",
     "prepackage:all": "sh scripts/build-helpers.sh",
     "postpackage:all": "sh scripts/after-package.sh",
@@ -33,6 +38,7 @@
   },
   "dependencies": {
     "jszip": "^3.10.2",
+    "koffi": "^2.9.0",
     "node-hid": "^3.4.0",
     "ws": "^8.22.1"
   },
@@ -40,6 +46,7 @@
     "@electron/packager": "^20.3.0",
     "@types/node": "^26.6.6",
     "electron": "^45.2.1",
+    "electron-builder": "^25.1.8",
     "eslint": "^10.14.0",
     "typescript": "^7.0.2"
   }

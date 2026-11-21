@@ -19,9 +19,38 @@ const WATCHDOG = path.join(__dirname, 'plugin-watchdog.js');
 
 const { PluginHost, nodeRuntime } = require('./plugin-host');
 
+const WIN_TARGET = process.arch === 'arm64' ? 'aarch64-pc-windows-msvc' : 'x86_64-pc-windows-msvc';
 const TARGET =
-  process.arch === 'arm64' ? 'aarch64-apple-darwin' : process.arch === 'x64' ? 'x86_64-apple-darwin' : null;
+  process.platform === 'win32'
+    ? WIN_TARGET
+    : process.arch === 'arm64' ? 'aarch64-apple-darwin' : process.arch === 'x64' ? 'x86_64-apple-darwin' : null;
 const FALLBACK_TARGET = process.arch === 'arm64' ? 'x86_64-apple-darwin' : 'aarch64-apple-darwin';
+
+function codeKind(code) {
+  return /\.(html?|xhtml)$/i.test(code) ? 'html' : /\.(c|m)?js$/i.test(code) ? 'node' : 'native';
+}
+
+/**
+ * Windows: run CodePathWin (or the Windows CodePaths target) natively. A
+ * plugin that only lists macOS can still run when its code is Node or HTML.
+ */
+function codeForWindows(manifest) {
+  const osList = Array.isArray(manifest.OS) ? manifest.OS : [];
+  const winSupported =
+    !osList.length ||
+    osList.some((os) => ['windows', 'win', 'win32'].includes(String(os?.Platform || '').toLowerCase()));
+  const paths = manifest.CodePaths || {};
+  const candidates = winSupported
+    ? [manifest.CodePathWin, paths[WIN_TARGET], paths['x86_64-pc-windows-msvc'], manifest.CodePath]
+    : [manifest.CodePath, manifest.CodePathMac];
+  for (const code of candidates) {
+    if (!code) continue;
+    const kind = codeKind(code);
+    if (!winSupported && kind === 'native') continue;
+    return { path: code, kind, wine: false };
+  }
+  return null;
+}
 
 const DRM_MANIFEST_MESSAGE =
   'This plugin is DRM-protected by Elgato Marketplace. Its manifest is encrypted, so Ulanzi Deck Open cannot install it. Ask the plugin author for a DRM-free build, or use the Elgato Stream Deck app.';
@@ -156,7 +185,9 @@ class StreamDeckPlugins extends PluginHost {
     const overrides =
       process.platform === 'darwin'
         ? ['manifest.mac.json', 'manifest.macos.json']
-        : [`manifest.${process.platform}.json`];
+        : process.platform === 'win32'
+          ? ['manifest.windows.json', 'manifest.win.json', 'manifest.win32.json']
+          : [`manifest.${process.platform}.json`];
     for (const name of overrides) {
       const override = path.join(dir, name);
       if (!fs.existsSync(override)) continue;
@@ -344,6 +375,7 @@ class StreamDeckPlugins extends PluginHost {
   // ------------------------------------------------------------- discovery
 
   _codeFor(manifest) {
+    if (process.platform === 'win32') return codeForWindows(manifest);
     const osList = Array.isArray(manifest.OS) ? manifest.OS : [];
     const macSupported =
       !osList.length ||
@@ -413,7 +445,7 @@ class StreamDeckPlugins extends PluginHost {
       application: {
         font: 'ui-sans-serif',
         language: this.language,
-        platform: meta?.code?.wine ? 'windows' : 'mac',
+        platform: meta?.code?.wine || process.platform === 'win32' ? 'windows' : 'mac',
         platformVersion: os.release(),
         version: '7.1.0',
       },
@@ -1016,4 +1048,4 @@ class StreamDeckPlugins extends PluginHost {
 
 }
 
-module.exports = { StreamDeckPlugins, streamDeckPluginDirs, logSettings };
+module.exports = { StreamDeckPlugins, streamDeckPluginDirs, logSettings, codeForWindows };

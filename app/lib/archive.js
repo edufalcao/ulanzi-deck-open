@@ -110,9 +110,19 @@ function inspectZip(file, options = {}) {
   }
 }
 
+// Windows has no `unzip`, but ships bsdtar (System32\tar.exe), which reads ZIPs.
+// Entry paths were already checked by inspectZip, so only the argv differs.
+function unzipCommand(args) {
+  if (process.platform !== 'win32') return ['unzip', args];
+  const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+  if (args[0] === '-p') return [tar, ['-xOf', args[1], args[2]]];
+  return [tar, ['-xf', args[1], '-C', args[3]]];
+}
+
 function runUnzip(args, { timeoutMs = EXTRACT_TIMEOUT_MS, maxBuffer = 4 * 1024 * 1024 } = {}, onChild = null) {
   return new Promise((resolve, reject) => {
-    const child = execFile('unzip', args, { encoding: 'utf8', timeout: timeoutMs, maxBuffer }, (err, stdout, stderr) => {
+    const [bin, argv] = unzipCommand(args);
+    const child = execFile(bin, argv, { encoding: 'utf8', timeout: timeoutMs, maxBuffer, windowsHide: true }, (err, stdout, stderr) => {
       if (err) {
         const detail = String(stderr || err.message || '').trim().split('\n').filter(Boolean).pop();
         reject(new Error(detail || 'Could not unpack the archive'));

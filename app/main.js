@@ -62,7 +62,13 @@ let quitPromptOpen = false;
 const devRun = Boolean(process.env.ULANZI_SHOT || process.env.ULANZI_CONFIG_DIR);
 const wantsQuit = process.argv.includes('--quit');
 // Started by the login item: stay in the menu bar instead of opening the editor.
-const launchHidden = app.isPackaged && !devRun && app.getLoginItemSettings().wasOpenedAsHidden;
+// macOS reports openAsHidden; Windows login items pass --hidden instead.
+const launchHidden =
+  app.isPackaged &&
+  !devRun &&
+  (process.platform === 'win32'
+    ? process.argv.includes('--hidden')
+    : app.getLoginItemSettings().wasOpenedAsHidden);
 if (!devRun && !app.requestSingleInstanceLock()) {
   isQuitting = true;
   app.exit(0);
@@ -115,7 +121,7 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: '#0b0e14',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    trafficLightPosition: { x: 16, y: 18 },
+    ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 16, y: 18 } } : {}),
     acceptFirstMouse: true,
     show: !launchHidden,
     webPreferences: {
@@ -209,11 +215,13 @@ function showWindow() {
 }
 
 function createTray() {
+  // The macOS tray icon is a black template image; Windows needs a coloured one.
+  const trayName = process.platform === 'win32' ? 'tray-win.png' : 'tray.png';
   const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'tray.png')
-    : path.join(__dirname, 'build', 'tray.png');
+    ? path.join(process.resourcesPath, trayName)
+    : path.join(__dirname, 'build', trayName);
   const image = nativeImage.createFromPath(iconPath);
-  image.setTemplateImage(true);
+  if (process.platform === 'darwin') image.setTemplateImage(true);
   tray = new Tray(image);
   tray.setToolTip('Ulanzi Deck Open');
   tray.setContextMenu(
@@ -355,6 +363,7 @@ function applyLoginItemSettings() {
     app.setLoginItemSettings({
       openAtLogin: store.config.settings.launchAtLogin === true,
       openAsHidden: true,
+      ...(process.platform === 'win32' ? { args: ['--hidden'] } : {}),
     });
   } catch {
     /* launch items can be unavailable in some environments */
@@ -441,6 +450,29 @@ function buildMenu() {
     {
       label: 'File',
       submenu: [
+        // Windows has no app menu, so its items live under File.
+        ...(isMac
+          ? []
+          : [
+              {
+                label: 'Settings…',
+                accelerator: 'Ctrl+,',
+                click: () => {
+                  showWindow();
+                  send(CH.appOpenSettings);
+                },
+              },
+              {
+                label: 'Check for Updates…',
+                click: async () => {
+                  showWindow();
+                  send(CH.appUpdateResult, await checkForUpdates());
+                },
+              },
+              { label: 'Reconnect Deck', click: () => deck.connect() },
+              { label: 'About Ulanzi Deck Open', click: () => send(CH.appShowAbout) },
+              { type: 'separator' },
+            ]),
         {
           label: 'Close Window',
           accelerator: 'CmdOrCtrl+W',
@@ -456,6 +488,7 @@ function buildMenu() {
             showWindow();
           },
         },
+        ...(isMac ? [] : [{ type: 'separator' }, { label: 'Quit Ulanzi Deck Open', click: requestQuit }]),
       ],
     },
     {
@@ -595,6 +628,12 @@ function setSeizeState(running, message, need) {
 function startHidSeize() {
   if (noDeck) {
     setSeizeState(false, 'Key capture is off (no-deck mode)');
+    return;
+  }
+  if (process.platform === 'win32') {
+    // Windows cannot seize a keyboard from user mode; the firmware fallback
+    // that types its setup URL does not occur on firmware 2.0.3.
+    setSeizeState(false, 'Not available on Windows', 'unsupported');
     return;
   }
   if (process.platform === 'darwin' && keyCaptureUnsupported(process.getSystemVersion())) {

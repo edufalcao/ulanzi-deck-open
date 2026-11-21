@@ -1,0 +1,13 @@
+/* Windows fonts and macOS-only settings. Applied only when platform-win.js
+   marks <html data-platform="win32">. */
+:root[data-platform="win32"] {
+  font-family: "Segoe UI Variable Text", "Segoe UI", "Inter", system-ui, sans-serif;
+}
+:root[data-platform="win32"] .textarea,
+:root[data-platform="win32"] .hotkey-value {
+  font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+:root[data-platform="win32"] #seize-row,
+:root[data-platform="win32"] #seize-note {
+  display: none !important;
+}

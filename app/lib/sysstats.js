@@ -50,6 +50,15 @@ function gpuPercent(callback) {
   }
   gpuAt = now;
   gpuBusy = true;
+  if (process.platform === 'win32') {
+    require('./platform').win.gpu.sampleGpu((value) => {
+      gpuBusy = false;
+      if (value !== null) gpu = value;
+      latest.gpu = gpu;
+      if (callback) callback(gpu);
+    });
+    return;
+  }
   execFile('ioreg', ['-r', '-d', '1', '-c', 'IOAccelerator'], { timeout: 3000 }, (err, stdout) => {
     gpuBusy = false;
     if (err || !stdout) {

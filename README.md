@@ -75,6 +75,8 @@ what the deck shows (labels are rendered into the images).
 
 ## Requirements
 
+* **Windows 10/11 (x64)** is supported too — see [`docs/WINDOWS.md`](docs/WINDOWS.md)
+  for building, installing and what differs. The rest of this README describes macOS.
 * **macOS 13 or newer.** Apple Silicon is the default build; Intel Macs can build the
   universal app.
 * **Node.js 22.13 or newer** (`node -v`).

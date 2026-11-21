@@ -5,6 +5,11 @@ const path = require('node:path');
 
 /** ~/Library/Logs/Ulanzi Deck Open/<name>.log */
 function appLogPath(name, home = process.env.HOME || '') {
+  // Windows has no HOME and no ~/Library: use %LOCALAPPDATA%.
+  if (process.platform === 'win32' && !arguments[1]) {
+    const base = process.env.LOCALAPPDATA || path.join(require('node:os').homedir(), 'AppData', 'Local');
+    return path.join(base, 'Ulanzi Deck Open', 'Logs', `${name}.log`);
+  }
   return path.join(home, 'Library', 'Logs', 'Ulanzi Deck Open', `${name}.log`);
 }
 

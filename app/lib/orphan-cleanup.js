@@ -33,6 +33,11 @@ function findOrphans(psOutput, roots, runtimes = []) {
 }
 
 function cleanOrphans({ roots = [], runtimes = [], exec = execFileSync, kill = process.kill, log = console.log } = {}) {
+  if (process.platform === 'win32' && exec === execFileSync) {
+    // No `ps` and no PID-1 re-parenting on Windows; the sweep runs async.
+    require('./platform').win.processes.cleanOrphans({ roots, runtimes, log }).catch(() => {});
+    return [];
+  }
   let output = '';
   try {
     output = exec('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8' });

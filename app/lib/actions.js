@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const electron = require('electron');
 const { shell, app, dialog, BrowserWindow } = electron;
 const { schemeOf, hasControlCharacters, isBlockedScheme, isKnownScheme } = require('./url-safety');
+const { win } = require('./platform');
 
 const { MEDIA_OPS } = require('./constants');
 const MEDIA = new Set(MEDIA_OPS);
@@ -65,12 +66,14 @@ function setShellErrorHandler(handler) {
 
 function runShell(command, meta = null) {
   return new Promise((resolve) => {
-    const child = spawn('/bin/sh', ['-c', String(command)], {
-      detached: true,
-      // A background child inherits these handles, so stdout goes to /dev/null
-      // and stderr is closed as soon as the shell exits.
-      stdio: ['ignore', 'ignore', 'pipe'],
-    });
+    const child = win
+      ? win.shell.spawnShell(command, ['ignore', 'ignore', 'pipe'])
+      : spawn('/bin/sh', ['-c', String(command)], {
+          detached: true,
+          // A background child inherits these handles, so stdout goes to /dev/null
+          // and stderr is closed as soon as the shell exits.
+          stdio: ['ignore', 'ignore', 'pipe'],
+        });
     let stderr = '';
     child.stderr.on('data', (data) => {
       stderr = (stderr + data.toString()).slice(-4000);
@@ -141,10 +144,12 @@ function runCommandOutput(command, { timeout = 8000 } = {}) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn('/bin/sh', ['-c', String(command)], {
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
+      child = win
+        ? win.shell.spawnShell(command, ['ignore', 'pipe', 'pipe'])
+        : spawn('/bin/sh', ['-c', String(command)], {
+            detached: true,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
     } catch (err) {
       return resolve({ ok: false, error: err.message });
     }
@@ -157,6 +162,7 @@ function runCommandOutput(command, { timeout = 8000 } = {}) {
     let stderr = Buffer.alloc(0);
 
     const stop = () => {
+      if (win) return win.shell.killTree(child.pid);
       try {
         process.kill(-child.pid, 'SIGKILL');
       } catch {
@@ -258,6 +264,7 @@ function applescript(script) {
 }
 
 async function runHotkey(combo) {
+  if (win) return win.input.hotkey(combo);
   const parts = String(combo || '')
     .toLowerCase()
     .split('+')
@@ -353,6 +360,12 @@ async function openApp(value) {
     return execFileResult('/usr/bin/open', [target]);
   }
   if (process.platform === 'win32') {
+    // .exe/.lnk paths open through the shell; bare names ("notepad") still go
+    // through `start`, which searches PATH and App Paths.
+    if (/[\\/]/.test(target) && fs.existsSync(target)) {
+      const error = await shell.openPath(target);
+      if (!error) return { ok: true };
+    }
     return execFileResult('cmd', ['/c', 'start', '', target]);
   }
   return execFileResult('/usr/bin/xdg-open', [target]);
@@ -368,6 +381,7 @@ async function openTarget(value) {
 async function typeText(value, enter = false) {
   const text = String(value ?? '');
   if (!text && !enter) return { ok: false, error: 'empty text' };
+  if (win) return win.input.typeText(text, enter);
   // The helper posts Unicode, so emoji work; System Events keystroke types "a" for them.
   const helper = helperBinary('hotkey');
   if (process.platform === 'darwin' && require('node:fs').existsSync(helper)) {
@@ -383,6 +397,7 @@ async function typeText(value, enter = false) {
 async function closeApp(value) {
   const name = String(value || '').trim();
   if (!name) return { ok: false, error: 'empty app name' };
+  if (win) return win.apps.closeApp(name);
   return applescript(`tell application ${JSON.stringify(name)} to quit`);
 }
 
@@ -397,7 +412,9 @@ function playSound(action, id = 'default') {
     }
     const rawVolume = Number(action.volume);
     const volume = Number.isFinite(rawVolume) ? Math.min(1, Math.max(0, rawVolume)) : 1;
-    const child = spawn('/usr/bin/afplay', ['-v', String(volume), file], { stdio: 'ignore' });
+    const child = win
+      ? win.sound.spawnPlayer(file, volume)
+      : spawn('/usr/bin/afplay', ['-v', String(volume), file], { stdio: 'ignore' });
     audioPlayers.set(id, child);
     child.on('exit', () => {
       if (audioPlayers.get(id) === child) audioPlayers.delete(id);
@@ -420,6 +437,7 @@ function stopSound(id = 'default') {
 function mediaKey(op) {
   return new Promise((resolve) => {
     if (!MEDIA.has(op)) return resolve({ ok: false, error: `unknown media key: ${op}` });
+    if (win) return resolve(win.input.mediaKey(op));
     // Native helper mirrors Ulanzi Studio's MediaKeysBridge (prime the event
     // queue, key-down, key-up with no gap). See native/mediakey.m.
     const child = spawn(mediaBinary(), [op], { stdio: 'ignore' });

@@ -6,6 +6,8 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 
+const { win } = require('./platform');
+
 const execFileAsync = promisify(execFile);
 const cache = new Map();
 
@@ -77,6 +79,7 @@ const APP_DIRS = [
 async function resolveAppPath(value) {
   const target = String(value || '').trim();
   if (!target) return null;
+  if (win) return win.apps.resolveAppPath(target);
   if (/\.app$/i.test(target)) {
     try {
       const stat = await fs.stat(target);
@@ -114,6 +117,18 @@ async function appIconDataUrl(appPath) {
     } catch {
       /* fall back to the .icns + sips path */
     }
+  }
+  if (!result && win) {
+    // Windows: the shell's icon for the .exe/.lnk (no .icns, no sips).
+    try {
+      const { app } = require('electron');
+      const image = await app.getFileIcon(appPath, { size: 'large' });
+      if (image && !image.isEmpty()) result = `data:image/png;base64,${image.toPNG().toString('base64')}`;
+    } catch {
+      result = null;
+    }
+    cache.set(appPath, result);
+    return result;
   }
   if (result) {
     cache.set(appPath, result);

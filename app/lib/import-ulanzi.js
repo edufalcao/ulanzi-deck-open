@@ -19,7 +19,10 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { extractZip } = require('./archive');
 
-const ULANZI_DIR = path.join(os.homedir(), 'Library/Application Support/Ulanzi/UlanziDeck');
+const ULANZI_DIR =
+  process.platform === 'win32'
+    ? require('./platform').win.paths.ulanziDataDir()
+    : path.join(os.homedir(), 'Library/Application Support/Ulanzi/UlanziDeck');
 const PROFILES_DIR = path.join(ULANZI_DIR, 'ProfilesV2');
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg']);
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -55,10 +58,35 @@ const KEY_NAMES = {
   pagedown: 'pagedown',
 };
 
+// Ulanzi Studio for Windows stores "Win+Shift+S" / "Ctrl+Alt+Delete" instead
+// of macOS glyphs.
+const WIN_MODS = { ctrl: 'ctrl', control: 'ctrl', alt: 'alt', shift: 'shift', win: 'win', windows: 'win', meta: 'win' };
+const WIN_KEYS = { delete: 'forwarddelete', del: 'forwarddelete', ins: 'insert', pgup: 'pageup', pgdn: 'pagedown', plus: 'plus' };
+
+function convertPlusHotkey(text) {
+  const parts = text.split('+').map((part) => part.trim());
+  // "Ctrl++" ends in two empty parts: that key is "+".
+  if (parts.length > 1 && parts.at(-1) === '' && parts.at(-2) === '') parts.splice(-2, 2, 'plus');
+  const mods = new Set();
+  let key = null;
+  for (const part of parts.filter(Boolean)) {
+    const lower = part.toLowerCase();
+    if (WIN_MODS[lower] && key === null) mods.add(WIN_MODS[lower]);
+    else key = lower;
+  }
+  if (!key) return null;
+  if (WIN_KEYS[key]) key = WIN_KEYS[key];
+  else if (KEY_NAMES[key]) key = KEY_NAMES[key];
+  else if (/^num(pad)?\s*\d$/.test(key)) key = `numpad${key.match(/\d/)[0]}`;
+  else if (!/^f\d{1,2}$/.test(key) && key.length !== 1) key = key.replace(/\s+/g, '');
+  return [...['ctrl', 'alt', 'shift', 'win'].filter((m) => mods.has(m)), key].join('+');
+}
+
 /** "⌃ ⌘ Q" → "ctrl+cmd+q". Returns null when the combo cannot be expressed. */
 function convertHotkey(raw) {
   const text = String(raw || '').trim();
   if (!text) return null;
+  if (!/[⌃⌘⌥⇧]/.test(text) && /^[^+\s]+(\s*\+\s*[^+\s]*)+$/.test(text)) return convertPlusHotkey(text);
   // Some profiles separate glyphs with several spaces (AU05).
   const parts = text.split(/\s+/).filter(Boolean);
   const mods = [];

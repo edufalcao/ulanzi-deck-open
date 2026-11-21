@@ -11,6 +11,16 @@ const CONTROL_INTERFACE = 0;
 const { DEFAULT_FONT } = require('./constants');
 const sysstats = require('./sysstats');
 
+// Windows lists one HID path per top-level collection, and the keyboard
+// collection (interface 1, usage page 1) cannot be opened, so never fall back
+// to it there. Other platforms keep the original fallback.
+function pickControl(devices) {
+  const control = devices.find((d) => d.interface === CONTROL_INTERFACE);
+  if (control) return control;
+  if (process.platform === 'win32') return devices.find((d) => d.usagePage === 0x0c) || null;
+  return devices[0] || null;
+}
+
 class Deck extends EventEmitter {
   constructor() {
     super();
@@ -28,7 +38,7 @@ class Deck extends EventEmitter {
     const devices = HID.devices().filter(
       (d) => d.vendorId === VENDOR_ID && d.productId === PRODUCT_ID
     );
-    return devices.find((d) => d.interface === CONTROL_INTERFACE) || devices[0] || null;
+    return pickControl(devices);
   }
 
   /** The same lookup without blocking the main thread during HID enumeration. */
@@ -36,7 +46,7 @@ class Deck extends EventEmitter {
     const devices = (await HID.devicesAsync()).filter(
       (d) => d.vendorId === VENDOR_ID && d.productId === PRODUCT_ID
     );
-    return devices.find((d) => d.interface === CONTROL_INTERFACE) || devices[0] || null;
+    return pickControl(devices);
   }
 
   get connected() {
