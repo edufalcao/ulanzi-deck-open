@@ -112,7 +112,7 @@ function normalizeAction(action) {
     }
   }
   if (type === 'brightness') {
-    out.op = out.op === 'down' ? 'down' : 'up';
+    out.op = out.op === 'down' || out.op === 'off' ? out.op : 'up';
     out.step = Math.min(50, Math.max(1, Math.round(Number(out.step) || 5)));
   }
   if (type === 'multi' || type === 'toggle' || type === 'pop') {

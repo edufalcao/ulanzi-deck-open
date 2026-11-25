@@ -165,6 +165,7 @@ handle(CH.deckWideMode, (_evt, mode) => {
 });
 
 handle(CH.deckBrightness, (_evt, level) => {
+  if (process.env.ULANZI_LOG_KEYS) console.log(`[deck] brightness ${level}`);
   try {
     deck.setBrightness(level);
     return { ok: true };

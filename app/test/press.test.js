@@ -357,3 +357,234 @@ test('a timer survives the inspector replacing its action object', async () => {
   context.toggleTimer(replacement);
   assert.equal(context.timerTextFor(replacement), '', 'cancel found the running timer');
 });
+
+function brightnessHarness(t, overrides = {}) {
+  const levels = [];
+  // Resolve timers lazily so they hit the mocked globals.
+  const harness = makeHarness(t, {
+    setTimeout: (...args) => globalThis.setTimeout(...args),
+    clearTimeout: (...args) => globalThis.clearTimeout(...args),
+    setInterval: (...args) => globalThis.setInterval(...args),
+    clearInterval: (...args) => globalThis.clearInterval(...args),
+    ...overrides,
+  });
+  harness.context.api.setBrightness = (level) => levels.push(level);
+  return { ...harness, levels };
+}
+
+test('brightness off darkens the deck only after the key is released', async (t) => {
+  const { context, state, key, levels } = brightnessHarness(t);
+  key.action = { type: 'brightness', op: 'off' };
+
+  context.handleKeyEvent(0, true);
+  await flush();
+  t.mock.timers.tick(1000);
+  assert.deepEqual(levels, []);
+
+  context.handleKeyEvent(0, false);
+  t.mock.timers.tick(249);
+  assert.deepEqual(levels, []);
+  t.mock.timers.tick(1);
+  assert.deepEqual(levels, [0]);
+  assert.equal(state.config.settings.brightness, 50);
+});
+
+test('brightness off waits for every held key', async (t) => {
+  const { context, key, levels } = brightnessHarness(t);
+  key.action = { type: 'none' };
+  context.handleKeyEvent(5, true);
+  key.action = { type: 'brightness', op: 'off' };
+  context.handleKeyEvent(0, true);
+  context.handleKeyEvent(0, false);
+  await flush();
+  t.mock.timers.tick(1000);
+  assert.deepEqual(levels, []);
+
+  context.handleKeyEvent(5, false);
+  t.mock.timers.tick(250);
+  assert.deepEqual(levels, [0]);
+});
+
+test('keys after brightness off run normally (the firmware handles waking)', async (t) => {
+  const { context, calls, key, levels } = brightnessHarness(t);
+  key.action = { type: 'brightness', op: 'off' };
+  context.handleKeyEvent(0, true);
+  context.handleKeyEvent(0, false);
+  await flush();
+  t.mock.timers.tick(250);
+
+  key.action = { type: 'app', value: 'app' };
+  context.handleKeyEvent(1, true);
+  context.handleKeyEvent(1, false);
+  await flush();
+  assert.deepEqual(levels, [0]);
+  assert.deepEqual(calls.actions, [{ type: 'app', value: 'app' }]);
+});
+
+test('clearDeckOff cancels a turn-off that has not gone dark yet', async (t) => {
+  const { context, key, levels } = brightnessHarness(t);
+  key.action = { type: 'brightness', op: 'off' };
+  context.handleKeyEvent(0, true);
+  context.handleKeyEvent(0, false);
+  await flush();
+
+  context.clearDeckOff();
+  t.mock.timers.tick(250);
+  assert.deepEqual(levels, []);
+});
+
+test('brightness off forgets a key whose release never arrives', async (t) => {
+  let now = 1_000_000;
+  const { context, key, levels } = brightnessHarness(t, {
+    Date: { now: () => now },
+  });
+  key.action = { type: 'brightness', op: 'off' };
+  context.handleKeyEvent(0, true);
+  await flush();
+  t.mock.timers.tick(1000);
+  assert.deepEqual(levels, []);
+
+  now += 6000;
+  t.mock.timers.tick(250);
+  assert.deepEqual(levels, [0]);
+});
+
+test('brightness off waits for an upload in flight', async (t) => {
+  const { context, key, levels } = brightnessHarness(t);
+  let finish;
+  const upload = context.trackDeckPush(new Promise((resolve) => (finish = resolve)));
+  key.action = { type: 'brightness', op: 'off' };
+  context.handleKeyEvent(0, true);
+  context.handleKeyEvent(0, false);
+  await flush();
+  t.mock.timers.tick(1000);
+  assert.deepEqual(levels, []);
+
+  finish();
+  await upload;
+  t.mock.timers.tick(250);
+  assert.deepEqual(levels, [0]);
+});
+
+// The real push code (ui.js) and screensaver (app.js) around the turn-off.
+function offHarness(t) {
+  const harness = brightnessHarness(t);
+  const { context, state } = harness;
+  const sent = [];
+  const read = (file) => fs.readFileSync(path.join(__dirname, '../renderer', file), 'utf8');
+  const slice = (text, from, to) => text.slice(text.indexOf(from), text.indexOf(to, text.indexOf(from)));
+  const ui = read('ui.js');
+  const app = read('app.js');
+  state.status = { connected: true };
+  Object.assign(state.config.settings, { autoPush: true, standbySeconds: 20, lockScreen: true });
+  context.api.pushPage = async () => (sent.push('page'), { ok: true });
+  context.api.pushKey = async () => (sent.push('key'), { ok: true });
+  const tile = {
+    classList: { add: () => {}, remove: () => {} },
+    querySelector: () => ({ toDataURL: () => 'data:image/png;base64,AA==' }),
+  };
+  const grid = { children: Array.from({ length: 14 }, () => tile), textContent: '' };
+  Object.assign(context, {
+    $: () => grid,
+    COLS: 5,
+    LIVE_PUSH_INTERVAL: 1000,
+    LIVE_PUSH_URGENT_INTERVAL: 150,
+    drawGrid: async () => {},
+    renderPushButton: () => {},
+    renderSyncState: () => {},
+    renderStandbySlices: async () => [],
+    scheduleAutoExit: () => {},
+  });
+  const push = slice(ui, 'let livePushTimer', '// ------------------------------------------------------------------ pages');
+  const saver = slice(app, 'const standby = {', 'function bind()');
+  const lock = /const lock = \{/.test(saver) ? '' : 'const lock = { active: false };';
+  const lockFn = /function lockActive/.test(saver) ? '' : 'function lockActive() { return lock.active; }';
+  new vm.Script(`let pushTimer = null;\n${push}\n${lock}\n${lockFn}\n${saver}`).runInContext(context);
+  const settle = async () => {
+    for (let i = 0; i < 6; i += 1) await flush();
+  };
+  const tick = async (ms) => {
+    t.mock.timers.tick(ms);
+    await settle();
+  };
+  const turnOff = async () => {
+    harness.key.action = { type: 'brightness', op: 'off' };
+    context.handleKeyEvent(0, true);
+    context.handleKeyEvent(0, false);
+    await tick(250);
+    assert.deepEqual(harness.levels, [0]);
+    harness.key.action = { type: 'none' };
+    sent.length = 0;
+  };
+  return { ...harness, sent, tick, turnOff };
+}
+
+test('the screensaver starts on a lit deck', async (t) => {
+  const { context, sent, tick } = offHarness(t);
+  context.scheduleStandby();
+  await tick(20_000);
+  assert.deepEqual(sent, ['page']);
+});
+
+test('the screensaver does not light a deck that is off', async (t) => {
+  const { context, sent, tick, turnOff } = offHarness(t);
+  context.scheduleStandby();
+  await turnOff();
+  for (let i = 0; i < 5; i += 1) await tick(20_000);
+  assert.deepEqual(sent, []);
+  assert.equal(context.standbyActive(), false);
+});
+
+test('automatic pushes wait for the next key event, then send one page', async (t) => {
+  const { context, state, sent, tick, turnOff } = offHarness(t);
+  state.config.settings.standbySeconds = 0;
+  await turnOff();
+  context.scheduleLivePush(3);
+  context.schedulePush();
+  context.pushNow({ background: true });
+  await tick(10_000);
+  assert.deepEqual(sent, []);
+
+  context.handleKeyEvent(4, false); // the firmware delivers a lone release
+  await tick(400);
+  assert.deepEqual(sent, ['page']);
+  context.scheduleLivePush(3);
+  await tick(10_000);
+  assert.deepEqual(sent, ['page', 'key']);
+});
+
+test('a push already scheduled when the deck goes off is held', async (t) => {
+  const { context, sent, tick, turnOff } = offHarness(t);
+  context.schedulePush();
+  await turnOff();
+  await tick(1000);
+  assert.deepEqual(sent, []);
+});
+
+test('an explicit push (unlock, Push button) lights the deck', async (t) => {
+  const { context, sent, tick, turnOff } = offHarness(t);
+  await turnOff();
+  await context.pushNow();
+  assert.deepEqual(sent, ['page']);
+  context.scheduleLivePush(3);
+  await tick(10_000);
+  assert.deepEqual(sent, ['page', 'key']);
+});
+
+test('locking a deck that is off keeps it dark and still ignores keys', async (t) => {
+  const { context, calls, key, sent, tick, turnOff } = offHarness(t);
+  await turnOff();
+  await context.enterLockScreen();
+  await tick(1000);
+  assert.deepEqual(sent, []);
+
+  key.action = { type: 'app', value: 'app' };
+  context.handleKeyEvent(2, true);
+  context.handleKeyEvent(2, false);
+  await tick(400);
+  assert.equal(calls.actions.length, 0);
+  assert.deepEqual(sent, ['page']); // the lock frame, now that the deck is lit
+
+  await context.exitLockScreen();
+  assert.deepEqual(sent, ['page', 'page']);
+});

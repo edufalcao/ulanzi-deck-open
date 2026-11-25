@@ -1,6 +1,6 @@
 'use strict';
 
-/* global $, ACTION_LABELS, activePage, api, autoIconFor, backgroundFor, cancelSequences, clearStandbyTimers, COLS, confirmAction, effectiveKey, emptyKey, ensureKey, esc, isPinnedSlot, KEY_COUNT, keyAt, lockActive, nextFreeIndex, pageInfo, pinnedFor, pressState, pushTimer, renderInspector, renderKey, renderProfileSelect, renderSystemPanel, saveTimer, scheduleCommandOutputSync, standby, standbyActive, state, stopLock, syncCommandOutputs, tickVisibleCommandOutputs, uuid, WIDE_KEY_INDEX */
+/* global $, ACTION_LABELS, activePage, api, autoIconFor, backgroundFor, cancelSequences, clearStandbyTimers, COLS, confirmAction, deckOffActive, effectiveKey, emptyKey, ensureKey, esc, holdDeckPush, isPinnedSlot, KEY_COUNT, keyAt, lockActive, nextFreeIndex, noteDeckPush, pageInfo, pinnedFor, pressState, pushTimer, renderInspector, renderKey, renderProfileSelect, renderSystemPanel, saveTimer, scheduleCommandOutputSync, standby, standbyActive, state, stopLock, syncCommandOutputs, tickVisibleCommandOutputs, trackDeckPush, uuid, WIDE_KEY_INDEX */
 
 // --------------------------------------------------------------- rendering
 
@@ -18,6 +18,7 @@ function scheduleAutoExit(page = activePage()) {
     if (!current || current.id !== page.id || !page.parentId) return;
     if (typeof standbyActive === 'function' && standbyActive()) return scheduleAutoExit(page);
     if (typeof lockActive === 'function' && lockActive()) return scheduleAutoExit(page);
+    if (typeof deckOffActive === 'function' && deckOffActive()) return scheduleAutoExit(page);
     navigate(page.parentId);
   }, seconds * 1000);
 }
@@ -737,7 +738,7 @@ async function pushKeyNow(index) {
   const slot = `${index % COLS}_${Math.floor(index / COLS)}`;
   const png = canvas.toDataURL('image/png').split(',')[1];
   if (!png) return false;
-  const res = await api.pushKey(slot, png);
+  const res = await trackDeckPush(api.pushKey(slot, png));
   return Boolean(res?.ok);
 }
 
@@ -747,6 +748,13 @@ async function flushLivePush() {
   if (state.pushing) {
     lastLivePushAt = Date.now();
     livePushTimer = setTimeout(flushLivePush, LIVE_PUSH_URGENT_INTERVAL);
+    return;
+  }
+  if (typeof holdDeckPush === 'function' && holdDeckPush()) {
+    // The wake push redraws every key.
+    livePushIndices.clear();
+    livePushFull = false;
+    livePushPending = false;
     return;
   }
   const indices = [...livePushIndices];
@@ -778,7 +786,10 @@ function schedulePush() {
   livePushTimer = null;
   livePushPending = false;
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(pushNow, 400);
+  pushTimer = setTimeout(() => {
+    if (typeof holdDeckPush === 'function' && holdDeckPush()) return;
+    pushNow();
+  }, 400);
 }
 
 async function pushNow({ background = false } = {}) {
@@ -787,6 +798,7 @@ async function pushNow({ background = false } = {}) {
     if (!state.status.connected || !state.config.settings.autoPush) return;
     if (typeof standbyActive === 'function' && standbyActive()) return;
     if (typeof lockActive === 'function' && lockActive()) return;
+    if (typeof holdDeckPush === 'function' && holdDeckPush()) return;
   } else {
     // An explicit push (button, navigation, wake) always leaves a screensaver.
     if (typeof standbyActive === 'function' && standbyActive()) {
@@ -794,6 +806,7 @@ async function pushNow({ background = false } = {}) {
       clearStandbyTimers();
     }
     if (typeof lockActive === 'function' && lockActive()) stopLock();
+    if (typeof noteDeckPush === 'function' && state.status.connected) noteDeckPush();
   }
   if (!state.status.connected) {
     if (!background) toast('Deck not connected — quit Ulanzi Studio and reconnect', true);

@@ -171,6 +171,7 @@ function actionMeta(action) {
     case 'timer':
       return { label: 'Timer' };
     case 'brightness':
+      if (action.op === 'off') return { label: 'Deck off' };
       return { label: action.op === 'down' ? 'Dimmer' : 'Brighter' };
     case 'pop':
       return { label: 'POP menu' };
@@ -318,10 +319,11 @@ function multiStepControls(act, index) {
       <select class="select multi-small multi-direction" data-field="op" aria-label="Brightness direction">
         <option value="up" ${(act.op || 'up') === 'up' ? 'selected' : ''}>Brighter</option>
         <option value="down" ${act.op === 'down' ? 'selected' : ''}>Dimmer</option>
+        <option value="off" ${act.op === 'off' ? 'selected' : ''}>Turn off</option>
       </select>
-      <input class="input multi-small" type="number" min="1" max="50" step="1" data-field="step"
+      ${act.op === 'off' ? '' : `<input class="input multi-small" type="number" min="1" max="50" step="1" data-field="step"
         value="${Math.min(50, Math.max(1, Number(act.step) || 5))}" aria-label="Brightness step percent" />
-      <span class="multi-unit">%</span>
+      <span class="multi-unit">%</span>`}
     </div>`;
   }
   if (act.type === 'sound') {
@@ -563,7 +565,7 @@ function bindMultiEditor(key) {
         steps[index] = { action: { ...act, step } };
       } else if (field === 'op') {
         steps[index] = { action: { ...act, op: input.value } };
-        if (act.type === 'sound') {
+        if (act.type === 'sound' || act.type === 'brightness') {
           commit();
           renderInspector();
           return;
@@ -1275,10 +1277,11 @@ function renderInspector() {
       <select class="select" id="insp-brightness-op">
         <option value="up" ${(action.op || 'up') === 'up' ? 'selected' : ''}>Brighter</option>
         <option value="down" ${action.op === 'down' ? 'selected' : ''}>Dimmer</option>
+        <option value="off" ${action.op === 'off' ? 'selected' : ''}>Turn off</option>
       </select>
-      <input class="input" id="insp-brightness-step" type="number" min="1" max="50" step="1" value="${Number(action.step) || 5}" />
-      <span class="field-hint" style="flex:0 0 auto">%</span>
-    </div>`;
+      ${action.op === 'off' ? '' : `<input class="input" id="insp-brightness-step" type="number" min="1" max="50" step="1" value="${Number(action.step) || 5}" />
+      <span class="field-hint" style="flex:0 0 auto">%</span>`}
+    </div>${action.op === 'off' ? '<div class="field-hint">Turns the Deck\'s screen off. Press any key to turn it back on; that press does nothing else.</div>' : ''}`;
   } else if (action.type === 'multi' || action.type === 'toggle') {
     valueField = multiEditor(action, page);
   } else if (action.type === 'pop') {

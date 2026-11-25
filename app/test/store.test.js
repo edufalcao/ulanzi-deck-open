@@ -660,3 +660,14 @@ test('a saved tile with no title adopts the key caption once; other keys are lef
   assert.equal(keys[2].tile.title, '', 'a non-tile face is not touched');
   assert.equal(keys[3].tile.title, '');
 });
+
+test('brightness actions keep up, down and off and default to up', () => {
+  const config = createDefaultConfig();
+  config.pages[0].keys[0] = { action: { type: 'brightness', op: 'off' } };
+  config.pages[0].keys[1] = { action: { type: 'brightness', op: 'down', step: 10 } };
+  config.pages[0].keys[2] = { action: { type: 'brightness', op: 'sideways' } };
+  const keys = validateConfig(config).pages[0].keys;
+  assert.equal(keys[0].action.op, 'off');
+  assert.equal(keys[1].action.op, 'down');
+  assert.equal(keys[2].action.op, 'up');
+});
